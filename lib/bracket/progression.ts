@@ -47,6 +47,50 @@ function syncDerivedSlots(bracket: Bracket) {
   });
 }
 
+function getTerminalWinnersMatch(bracket: Bracket) {
+  return Object.values(bracket.matches).find(
+    (match) => match.bracket === "winners" && !match.nextWinner,
+  );
+}
+
+function updateChampion(bracket: Bracket) {
+  const grandFinal = Object.values(bracket.matches).find(
+    (candidate) => candidate.bracket === "grandFinal" && candidate.round === 1,
+  );
+  const reset = Object.values(bracket.matches).find(
+    (candidate) => candidate.bracket === "grandFinal" && candidate.round === 2,
+  );
+
+  if (grandFinal && reset) {
+    const winnersChampion = grandFinal.participants[0].teamId;
+    const grandFinalWinner = grandFinal.winnerId;
+    const resetShouldBeActive =
+      grandFinalWinner !== null && winnersChampion !== null && grandFinalWinner !== winnersChampion;
+
+    if (!resetShouldBeActive) {
+      reset.participants[0].teamId = null;
+      reset.participants[1].teamId = null;
+      reset.winnerId = null;
+      reset.loserId = null;
+    }
+
+    if (reset.winnerId) {
+      bracket.championId = reset.winnerId;
+      return;
+    }
+
+    if (grandFinal.winnerId && grandFinal.winnerId === winnersChampion) {
+      bracket.championId = grandFinal.winnerId;
+      return;
+    }
+
+    bracket.championId = null;
+    return;
+  }
+
+  bracket.championId = getTerminalWinnersMatch(bracket)?.winnerId ?? null;
+}
+
 export function applyAutomaticAdvancements(bracket: Bracket) {
   let changed = true;
 
@@ -79,6 +123,8 @@ export function applyAutomaticAdvancements(bracket: Bracket) {
       changed = true;
     });
   }
+
+  updateChampion(bracket);
 
   return bracket;
 }
@@ -126,43 +172,7 @@ export function setMatchWinner(bracket: Bracket, matchId: string, winnerId: stri
 
   applyAutomaticAdvancements(next);
 
-  const grandFinal = Object.values(next.matches).find(
-    (candidate) => candidate.bracket === "grandFinal" && candidate.round === 1,
-  );
-  const reset = Object.values(next.matches).find(
-    (candidate) => candidate.bracket === "grandFinal" && candidate.round === 2,
-  );
-
-  if (grandFinal && reset) {
-    const winnersChampion = grandFinal.participants[0].teamId;
-    const grandFinalWinner = grandFinal.winnerId;
-    const resetShouldBeActive =
-      grandFinalWinner !== null && winnersChampion !== null && grandFinalWinner !== winnersChampion;
-
-    if (!resetShouldBeActive) {
-      reset.participants[0].teamId = null;
-      reset.participants[1].teamId = null;
-      reset.winnerId = null;
-      reset.loserId = null;
-    }
-  }
-
-  const grandFinalReset = Object.values(next.matches).find(
-    (candidate) => candidate.bracket === "grandFinal" && candidate.round === 2,
-  );
-
-  if (grandFinalReset?.winnerId) {
-    next.championId = grandFinalReset.winnerId;
-  } else if (grandFinal?.winnerId) {
-    const winnersChampion = grandFinal.participants[0].teamId;
-    next.championId = grandFinal.winnerId === winnersChampion ? grandFinal.winnerId : null;
-  } else {
-    const singleFinal = Object.values(next.matches)
-      .filter((candidate) => candidate.bracket === "winners")
-      .sort((left, right) => right.round - left.round)[0];
-    next.championId = singleFinal?.winnerId ?? null;
-  }
-
+  updateChampion(next);
   next.updatedAt = nowIso();
   return next;
 }
@@ -181,7 +191,6 @@ export function clearMatchWinner(bracket: Bracket, matchId: string) {
   }
 
   applyAutomaticAdvancements(next);
-  next.championId = null;
   next.updatedAt = nowIso();
   return next;
 }
