@@ -1,6 +1,7 @@
 import { Bracket, BracketDraft, BracketSection, Match, MatchParticipant, Round, Team } from "@/lib/bracket/models";
 
-export const SUPPORTED_TEAM_COUNTS = [4, 8, 16, 32] as const;
+export const MIN_TEAM_COUNT = 2;
+export const MAX_TEAM_COUNT = 128;
 
 let idCounter = 0;
 
@@ -13,6 +14,15 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+export function clampTeamCount(teamCount: number) {
+  return Math.min(MAX_TEAM_COUNT, Math.max(MIN_TEAM_COUNT, Math.floor(teamCount || MIN_TEAM_COUNT)));
+}
+
+export function getBracketSize(teamCount: number) {
+  const normalizedCount = clampTeamCount(teamCount);
+  return 2 ** Math.ceil(Math.log2(normalizedCount));
+}
+
 export function createEmptyTeams(count: number): Team[] {
   return Array.from({ length: count }, (_, index) => ({
     id: createId("team"),
@@ -22,17 +32,18 @@ export function createEmptyTeams(count: number): Team[] {
 }
 
 export function normalizeTeams(teams: Team[], teamCount: number): Team[] {
-  const nextTeams: Team[] = teams.slice(0, teamCount).map((team, index) => ({
+  const normalizedCount = clampTeamCount(teamCount);
+  const nextTeams: Team[] = teams.slice(0, normalizedCount).map((team, index) => ({
     ...team,
     name: team.name || `Team ${index + 1}`,
     seed: team.seed ?? index + 1,
   }));
 
-  if (nextTeams.length >= teamCount) {
+  if (nextTeams.length >= normalizedCount) {
     return nextTeams;
   }
 
-  return [...nextTeams, ...createEmptyTeams(teamCount - nextTeams.length)];
+  return [...nextTeams, ...createEmptyTeams(normalizedCount - nextTeams.length)];
 }
 
 export function sortTeamsForSeeding(teams: Team[]): Team[] {
@@ -110,11 +121,13 @@ export function getRoundLabel(bracket: BracketSection, round: number, totalRound
 }
 
 export function createDraft(teamCount = 8): BracketDraft {
+  const normalizedCount = clampTeamCount(teamCount);
+
   return {
     name: "Bracket Factory Invitational",
     type: "single",
-    teamCount,
-    teams: createEmptyTeams(teamCount),
+    teamCount: normalizedCount,
+    teams: createEmptyTeams(normalizedCount),
   };
 }
 

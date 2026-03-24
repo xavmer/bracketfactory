@@ -47,6 +47,42 @@ function syncDerivedSlots(bracket: Bracket) {
   });
 }
 
+export function applyAutomaticAdvancements(bracket: Bracket) {
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    syncDerivedSlots(bracket);
+
+    Object.values(bracket.matches).forEach((match) => {
+      if (match.winnerId) {
+        return;
+      }
+
+      const [leftId, rightId] = match.participants.map((participant) => participant.teamId);
+
+      if ((leftId && rightId) || (!leftId && !rightId)) {
+        return;
+      }
+
+      match.winnerId = leftId ?? rightId ?? null;
+      match.loserId = leftId && rightId ? null : null;
+
+      if (match.nextWinner) {
+        propagateTeam(bracket, match.nextWinner.matchId, match.nextWinner.slot, match.winnerId);
+      }
+
+      if (match.nextLoser) {
+        propagateTeam(bracket, match.nextLoser.matchId, match.nextLoser.slot, null);
+      }
+
+      changed = true;
+    });
+  }
+
+  return bracket;
+}
+
 export function updateTeam(
   bracket: Bracket,
   teamId: string,
@@ -88,7 +124,7 @@ export function setMatchWinner(bracket: Bracket, matchId: string, winnerId: stri
     propagateTeam(next, match.nextLoser.matchId, match.nextLoser.slot, match.loserId);
   }
 
-  syncDerivedSlots(next);
+  applyAutomaticAdvancements(next);
 
   const grandFinal = Object.values(next.matches).find(
     (candidate) => candidate.bracket === "grandFinal" && candidate.round === 1,
@@ -144,7 +180,7 @@ export function clearMatchWinner(bracket: Bracket, matchId: string) {
     propagateTeam(next, match.nextLoser.matchId, match.nextLoser.slot, null);
   }
 
-  syncDerivedSlots(next);
+  applyAutomaticAdvancements(next);
   next.championId = null;
   next.updatedAt = nowIso();
   return next;

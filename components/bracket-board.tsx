@@ -23,6 +23,10 @@ interface ConnectorPath {
 const MATCH_CARD_HEIGHT = 170;
 const ROUND_MATCH_GAP = 18;
 const ROUND_COLUMN_GAP = 56;
+const MATCH_SLOT_CENTER_Y: Record<1 | 2, number> = {
+  1: 56,
+  2: 120,
+};
 
 function getRoundLayout(roundIndex: number) {
   const unit = MATCH_CARD_HEIGHT + ROUND_MATCH_GAP;
@@ -38,6 +42,53 @@ function getRoundLayout(roundIndex: number) {
     paddingTop: (unit * (2 ** roundIndex - 1)) / 2,
     gap: unit * 2 ** roundIndex - MATCH_CARD_HEIGHT,
   };
+}
+
+function getSectionRoundPositions(
+  rounds: Bracket["rounds"],
+  matches: Bracket["matches"],
+) {
+  const positionsByRoundId: Record<string, number[]> = {};
+  const hasCompactPlayIn =
+    rounds.length > 1 &&
+    rounds[0].title === "Play-In Round" &&
+    rounds[0].matchIds.length < rounds[1].matchIds.length;
+  const standardRounds = hasCompactPlayIn ? rounds.slice(1) : rounds;
+
+  standardRounds.forEach((round, roundIndex) => {
+    const layout = getRoundLayout(roundIndex);
+    positionsByRoundId[round.id] = round.matchIds.map(
+      (_, matchIndex) => layout.paddingTop + matchIndex * (MATCH_CARD_HEIGHT + layout.gap),
+    );
+  });
+
+  if (hasCompactPlayIn) {
+    const targetRound = rounds[1];
+    positionsByRoundId[rounds[0].id] = rounds[0].matchIds.map((matchId) => {
+      const targetIndex = targetRound.matchIds.findIndex((targetMatchId) =>
+        matches[targetMatchId].participants.some((participant) => participant.sourceMatchId === matchId),
+      );
+
+      if (targetIndex === -1) {
+        return 0;
+      }
+
+      const targetMatch = matches[targetRound.matchIds[targetIndex]];
+      const slot =
+        targetMatch.participants[0].sourceMatchId === matchId ? 1 : 2;
+
+      return positionsByRoundId[targetRound.id][targetIndex] + MATCH_SLOT_CENTER_Y[slot] - MATCH_CARD_HEIGHT / 2;
+    });
+  }
+
+  const sectionHeight = Math.max(
+    ...rounds.flatMap((round) =>
+      (positionsByRoundId[round.id] ?? []).map((position) => position + MATCH_CARD_HEIGHT),
+    ),
+    MATCH_CARD_HEIGHT,
+  );
+
+  return { positionsByRoundId, sectionHeight };
 }
 
 function getChampion(bracket: Bracket, teams: Team[]) {
@@ -185,6 +236,11 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
               return null;
             }
 
+            const { positionsByRoundId, sectionHeight } = getSectionRoundPositions(
+              groupedRounds[section],
+              bracket.matches,
+            );
+
             return (
               <section key={section} className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -217,8 +273,6 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                       ))}
                     </svg>
                     {groupedRounds[section].map((round, roundIndex) => {
-                      const layout = getRoundLayout(roundIndex);
-
                       return (
                         <div key={round.id} className="min-w-[292px] space-y-3">
                           <div>
@@ -229,31 +283,28 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                           <div
                             className="relative"
                             style={{
-                              paddingTop: `${layout.paddingTop}px`,
+                              height: `${sectionHeight}px`,
                             }}
                           >
-                            <div
-                              className="flex flex-col"
-                              style={{
-                                rowGap: `${layout.gap}px`,
-                              }}
-                            >
-                              {round.matchIds.map((matchId) => (
-                                <div
-                                  key={matchId}
-                                  ref={(node) => {
-                                    matchRefs.current[matchId] = node;
-                                  }}
-                                >
-                                  <MatchCard
-                                    match={bracket.matches[matchId]}
-                                    teams={bracket.teams}
-                                    onPickWinner={onPickWinner}
-                                    onClearWinner={onClearWinner}
-                                  />
-                                </div>
-                              ))}
-                            </div>
+                            {round.matchIds.map((matchId, matchIndex) => (
+                              <div
+                                key={matchId}
+                                ref={(node) => {
+                                  matchRefs.current[matchId] = node;
+                                }}
+                                className="absolute left-0"
+                                style={{
+                                  top: `${positionsByRoundId[round.id][matchIndex] ?? 0}px`,
+                                }}
+                              >
+                                <MatchCard
+                                  match={bracket.matches[matchId]}
+                                  teams={bracket.teams}
+                                  onPickWinner={onPickWinner}
+                                  onClearWinner={onClearWinner}
+                                />
+                              </div>
+                            ))}
                           </div>
                         </div>
                       );

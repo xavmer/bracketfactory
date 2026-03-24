@@ -9,12 +9,20 @@ import { generateBracket } from "@/lib/bracket/generation";
 import { clearMatchWinner, setMatchWinner } from "@/lib/bracket/progression";
 import { exportBracketJson, exportBracketPdf, exportBracketPng } from "@/lib/export";
 import { loadState, saveState } from "@/lib/storage";
-import { SUPPORTED_TEAM_COUNTS, createDraft, normalizeTeams } from "@/lib/bracket/utils";
+import {
+  MAX_TEAM_COUNT,
+  MIN_TEAM_COUNT,
+  clampTeamCount,
+  createId,
+  createDraft,
+  normalizeTeams,
+} from "@/lib/bracket/utils";
 
 export default function HomePage() {
   const [draft, setDraft] = useState<BracketDraft>(() => createDraft());
   const [bracket, setBracket] = useState<Bracket | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [teamImportText, setTeamImportText] = useState("");
   const boardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +56,33 @@ export default function HomePage() {
   );
 
   const exportDisabled = !bracket;
+
+  const importTeams = () => {
+    const importedNames = teamImportText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, MAX_TEAM_COUNT);
+
+    if (importedNames.length < MIN_TEAM_COUNT) {
+      return;
+    }
+
+    const teamCount = clampTeamCount(importedNames.length);
+    const teams = importedNames.map((name, index) => ({
+      id: createId("team"),
+      name,
+      seed: index + 1,
+    }));
+    const nextDraft = {
+      ...draft,
+      teamCount,
+      teams,
+    };
+
+    setDraft(nextDraft);
+    setBracket(generateBracket(nextDraft));
+  };
 
   return (
     <main className="min-h-screen bg-grain">
@@ -89,7 +124,7 @@ export default function HomePage() {
                     <p className="pb-1 text-sm font-medium text-slate-500">teams</p>
                   </div>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Power-of-two brackets for 4, 8, 16, and 32 teams.
+                    Flexible brackets from 2 to 128 teams with automatic byes.
                   </p>
                 </div>
                 <div className="rounded-[1.75rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-4 py-4 sm:col-span-2">
@@ -166,10 +201,13 @@ export default function HomePage() {
                     <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
                       Team Count
                     </span>
-                    <select
+                    <input
+                      type="number"
+                      min={MIN_TEAM_COUNT}
+                      max={MAX_TEAM_COUNT}
                       value={draft.teamCount}
                       onChange={(event) => {
-                        const teamCount = Number(event.target.value);
+                        const teamCount = clampTeamCount(Number(event.target.value));
                         setDraft((current) => ({
                           ...current,
                           teamCount,
@@ -181,13 +219,7 @@ export default function HomePage() {
                         setBracket(null);
                       }}
                       className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white"
-                    >
-                      {SUPPORTED_TEAM_COUNTS.map((count) => (
-                        <option key={count} value={count}>
-                          {count} teams
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
                 </div>
               </div>
@@ -218,6 +250,28 @@ export default function HomePage() {
                   className="inline-flex items-center justify-center rounded-2xl border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:border-accent hover:text-accent"
                 >
                   Reset Draft
+                </button>
+              </div>
+
+              <div className="mt-6 rounded-[1.75rem] border border-line bg-white/75 p-4">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-ink">Import Teams</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Paste one team per line. The list order becomes the seed order.
+                  </p>
+                </div>
+                <textarea
+                  value={teamImportText}
+                  onChange={(event) => setTeamImportText(event.target.value)}
+                  placeholder={`Duke\nKansas\nUConn\nPurdue`}
+                  className="min-h-[132px] w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white"
+                />
+                <button
+                  onClick={importTeams}
+                  disabled={teamImportText.trim().split("\n").filter(Boolean).length < MIN_TEAM_COUNT}
+                  className="mt-3 inline-flex w-full items-center justify-center rounded-2xl border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Import List And Generate
                 </button>
               </div>
 
@@ -316,8 +370,8 @@ export default function HomePage() {
                       Generate your first bracket
                     </h2>
                     <p className="text-sm leading-6 text-slate-600">
-                      Bracket Factory supports standard seeded placement for 4, 8, 16, and
-                      32-team tournaments, with automatic advancement and local saving.
+                      Bracket Factory supports 2 to 128 teams, standard seeding, automatic
+                      byes, winner advancement, and local saving.
                     </p>
                   </div>
                 </div>
