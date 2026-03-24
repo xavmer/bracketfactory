@@ -20,6 +20,41 @@ import {
 } from "@/lib/bracket/utils";
 import { applyAutomaticAdvancements } from "@/lib/bracket/progression";
 
+interface MatchGroup {
+  key: string;
+  title: string;
+}
+
+function distributeTeamsToRegions(teams: Team[], regionCount: number) {
+  const orderedTeams = sortTeamsForSeeding(teams);
+
+  if (regionCount <= 1) {
+    return [orderedTeams];
+  }
+
+  const regions = Array.from({ length: regionCount }, () => [] as Team[]);
+
+  for (let startIndex = 0; startIndex < orderedTeams.length; startIndex += regionCount) {
+    const seedBand = orderedTeams.slice(startIndex, startIndex + regionCount);
+    const isReverseBand = Math.floor(startIndex / regionCount) % 2 === 1;
+    const regionOrder = isReverseBand
+      ? Array.from({ length: regionCount }, (_, index) => regionCount - 1 - index)
+      : Array.from({ length: regionCount }, (_, index) => index);
+
+    seedBand.forEach((team, index) => {
+      const regionIndex = regionOrder[index];
+      regions[regionIndex].push(team);
+    });
+  }
+
+  return regions.map((regionTeams) =>
+    regionTeams.map((team, index) => ({
+      ...team,
+      seed: index + 1,
+    })),
+  );
+}
+
 function placeTeamsBySeed(teams: Team[], teamCount: number) {
   const orderedTeams = sortTeamsForSeeding(normalizeTeams(teams, teamCount));
   const bracketSize = getBracketSize(teamCount);
@@ -28,7 +63,11 @@ function placeTeamsBySeed(teams: Team[], teamCount: number) {
   return seeds.map((seed) => orderedTeams[seed - 1] ?? null);
 }
 
-function createExpandedSingleEliminationRounds(teams: Team[], teamCount: number) {
+function createExpandedSingleEliminationRounds(
+  teams: Team[],
+  teamCount: number,
+  group: MatchGroup,
+) {
   const bracketSize = getBracketSize(teamCount);
   const positions = placeTeamsBySeed(teams, teamCount);
   const matches: Record<string, Match> = {};
@@ -44,6 +83,8 @@ function createExpandedSingleEliminationRounds(teams: Team[], teamCount: number)
       const isOpeningRound = roundNumber === 1;
       const match = createMatch({
         bracket: "winners",
+        groupKey: group.key,
+        groupTitle: group.title,
         round: roundNumber,
         index,
         title: getRoundLabel("winners", roundNumber, totalRounds),
@@ -90,6 +131,8 @@ function createExpandedSingleEliminationRounds(teams: Team[], teamCount: number)
     rounds.push(
       createRound(
         "winners",
+        group.key,
+        group.title,
         roundNumber,
         getRoundLabel("winners", roundNumber, totalRounds),
         currentRoundMatches.map((match) => match.id),
@@ -101,13 +144,17 @@ function createExpandedSingleEliminationRounds(teams: Team[], teamCount: number)
   return { rounds, matches, finalMatchId: previousRoundMatches[0]?.id ?? null };
 }
 
-function createCompactSingleEliminationRounds(teams: Team[], teamCount: number) {
+function createCompactSingleEliminationRounds(
+  teams: Team[],
+  teamCount: number,
+  group: MatchGroup,
+) {
   const normalizedTeamCount = clampTeamCount(teamCount);
   const orderedTeams = sortTeamsForSeeding(normalizeTeams(teams, normalizedTeamCount));
   const mainBracketSize = 2 ** Math.floor(Math.log2(normalizedTeamCount));
 
   if (mainBracketSize === normalizedTeamCount) {
-    return createExpandedSingleEliminationRounds(teams, normalizedTeamCount);
+    return createExpandedSingleEliminationRounds(teams, normalizedTeamCount, group);
   }
 
   const matches: Record<string, Match> = {};
@@ -123,6 +170,8 @@ function createCompactSingleEliminationRounds(teams: Team[], teamCount: number) 
     const lowSeed = normalizedTeamCount - (seedSlot - (byeSeedsCount + 1));
     const match = createMatch({
       bracket: "winners",
+      groupKey: group.key,
+      groupTitle: group.title,
       round: 1,
       index: playInMatches.length,
       title: "Play-In Round",
@@ -144,7 +193,9 @@ function createCompactSingleEliminationRounds(teams: Team[], teamCount: number) 
   }
 
   if (playInMatches.length > 0) {
-    rounds.push(createRound("winners", 1, "Play-In Round", playInMatches.map((match) => match.id)));
+    rounds.push(
+      createRound("winners", group.key, group.title, 1, "Play-In Round", playInMatches.map((match) => match.id)),
+    );
   }
 
   const mainSeedOrder = buildSeedOrder(mainBracketSize);
@@ -159,6 +210,8 @@ function createCompactSingleEliminationRounds(teams: Team[], teamCount: number) 
     for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
       const match = createMatch({
         bracket: "winners",
+        groupKey: group.key,
+        groupTitle: group.title,
         round: actualRoundNumber,
         index: matchIndex,
         title: getRoundLabel("winners", actualRoundNumber, totalRounds),
@@ -222,6 +275,8 @@ function createCompactSingleEliminationRounds(teams: Team[], teamCount: number) 
     rounds.push(
       createRound(
         "winners",
+        group.key,
+        group.title,
         actualRoundNumber,
         getRoundLabel("winners", actualRoundNumber, totalRounds),
         currentRoundMatches.map((match) => match.id),
@@ -245,16 +300,83 @@ function buildLosersRoundMatchCounts(teamCount: number) {
   return counts;
 }
 
+function createChampionshipRoundsFromSources(
+  sourceMatches: Match[],
+  group: MatchGroup,
+  matches: Record<string, Match>,
+) {
+  const rounds: Round[] = [];
+  let previousRoundMatches = sourceMatches;
+  const totalRounds = Math.log2(sourceMatches.length);
+
+  for (let roundNumber = 1; roundNumber <= totalRounds; roundNumber += 1) {
+    const matchCount = sourceMatches.length / 2 ** roundNumber;
+    const currentRoundMatches: Match[] = [];
+
+    for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
+      const match = createMatch({
+        bracket: "winners",
+        groupKey: group.key,
+        groupTitle: group.title,
+        round: roundNumber,
+        index: matchIndex,
+        title: roundNumber === totalRounds ? "National Final" : `Regional Final ${roundNumber}`,
+        participants: [
+          createParticipant({
+            sourceType: "winner",
+            sourceMatchId: previousRoundMatches[matchIndex * 2].id,
+            label: "Region Champion",
+          }),
+          createParticipant({
+            sourceType: "winner",
+            sourceMatchId: previousRoundMatches[matchIndex * 2 + 1].id,
+            label: "Region Champion",
+          }),
+        ],
+      });
+
+      matches[match.id] = match;
+      currentRoundMatches.push(match);
+    }
+
+    previousRoundMatches.forEach((match, index) => {
+      match.nextWinner = {
+        matchId: currentRoundMatches[Math.floor(index / 2)].id,
+        slot: (index % 2 === 0 ? 1 : 2) as 1 | 2,
+      };
+    });
+
+    rounds.push(
+      createRound(
+        "winners",
+        group.key,
+        group.title,
+        roundNumber,
+        roundNumber === totalRounds ? "National Final" : `Regional Final ${roundNumber}`,
+        currentRoundMatches.map((match) => match.id),
+      ),
+    );
+    previousRoundMatches = currentRoundMatches;
+  }
+
+  return { rounds, finalMatchId: previousRoundMatches[0]?.id ?? null };
+}
+
 function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
   const bracketSize = getBracketSize(teamCount);
+  const winnersGroup = { key: "winners", title: "Winners Bracket" };
+  const losersGroup = { key: "losers", title: "Losers Bracket" };
+  const finalsGroup = { key: "grand-finals", title: "Finals" };
 
   if (bracketSize === 2) {
-    const winners = createExpandedSingleEliminationRounds(teams, teamCount);
+    const winners = createExpandedSingleEliminationRounds(teams, teamCount, winnersGroup);
     const rounds = [...winners.rounds];
     const matches = { ...winners.matches };
     const openingMatch = matches[rounds[0].matchIds[0]];
     const grandFinal = createMatch({
       bracket: "grandFinal",
+      groupKey: finalsGroup.key,
+      groupTitle: finalsGroup.title,
       round: 1,
       index: 0,
       title: "Grand Final",
@@ -273,6 +395,8 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
     });
     const reset = createMatch({
       bracket: "grandFinal",
+      groupKey: finalsGroup.key,
+      groupTitle: finalsGroup.title,
       round: 2,
       index: 0,
       title: "Grand Final Reset",
@@ -297,13 +421,15 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
 
     matches[grandFinal.id] = grandFinal;
     matches[reset.id] = reset;
-    rounds.push(createRound("grandFinal", 1, "Grand Final", [grandFinal.id]));
-    rounds.push(createRound("grandFinal", 2, "Grand Final Reset", [reset.id]));
+    rounds.push(createRound("grandFinal", finalsGroup.key, finalsGroup.title, 1, "Grand Final", [grandFinal.id]));
+    rounds.push(
+      createRound("grandFinal", finalsGroup.key, finalsGroup.title, 2, "Grand Final Reset", [reset.id]),
+    );
 
     return { rounds, matches, finalMatchId: reset.id, grandFinalId: grandFinal.id };
   }
 
-  const winners = createExpandedSingleEliminationRounds(teams, teamCount);
+  const winners = createExpandedSingleEliminationRounds(teams, teamCount, winnersGroup);
   const rounds = [...winners.rounds];
   const matches = { ...winners.matches };
   const winnersRoundIds = rounds.filter((round) => round.bracket === "winners");
@@ -318,6 +444,8 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
     for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
       const match = createMatch({
         bracket: "losers",
+        groupKey: losersGroup.key,
+        groupTitle: losersGroup.title,
         round: roundNumber,
         index: matchIndex,
         title: getRoundLabel("losers", roundNumber, totalRounds),
@@ -332,6 +460,8 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
     rounds.push(
       createRound(
         "losers",
+        losersGroup.key,
+        losersGroup.title,
         roundNumber,
         getRoundLabel("losers", roundNumber, totalRounds),
         currentRoundMatches.map((match) => match.id),
@@ -417,6 +547,8 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
   const losersFinal = losersRounds[losersRounds.length - 1][0];
   const grandFinal = createMatch({
     bracket: "grandFinal",
+    groupKey: finalsGroup.key,
+    groupTitle: finalsGroup.title,
     round: 1,
     index: 0,
     title: "Grand Final",
@@ -436,6 +568,8 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
 
   const grandFinalReset = createMatch({
     bracket: "grandFinal",
+    groupKey: finalsGroup.key,
+    groupTitle: finalsGroup.title,
     round: 2,
     index: 0,
     title: "Grand Final Reset",
@@ -461,21 +595,32 @@ function createDoubleEliminationRounds(teams: Team[], teamCount: number) {
   matches[grandFinal.id] = grandFinal;
   matches[grandFinalReset.id] = grandFinalReset;
 
-  rounds.push(createRound("grandFinal", 1, "Grand Final", [grandFinal.id]));
-  rounds.push(createRound("grandFinal", 2, "Grand Final Reset", [grandFinalReset.id]));
+  rounds.push(createRound("grandFinal", finalsGroup.key, finalsGroup.title, 1, "Grand Final", [grandFinal.id]));
+  rounds.push(
+    createRound("grandFinal", finalsGroup.key, finalsGroup.title, 2, "Grand Final Reset", [grandFinalReset.id]),
+  );
 
   return { rounds, matches, finalMatchId: grandFinalReset.id, grandFinalId: grandFinal.id };
 }
 
 export function generateBracket(draft: BracketDraft): Bracket {
   const teamCount = clampTeamCount(draft.teamCount);
-  const teams = normalizeTeams(draft.teams, teamCount);
+  const normalizedTeams = normalizeTeams(draft.teams, teamCount);
+  const regionCount =
+    draft.type === "double"
+      ? 1
+      : teamCount % Math.max(1, draft.regionCount || 1) === 0
+        ? Math.max(1, Math.min(draft.regionCount || 1, teamCount))
+        : 1;
+  const regionTeamGroups = distributeTeamsToRegions(normalizedTeams, regionCount);
+  const teams = regionTeamGroups.flat();
   const createdAt = nowIso();
   const base = {
     id: createId("bracket"),
     name: draft.name.trim() || "Untitled Tournament",
     type: draft.type,
     teamCount,
+    regionCount,
     teams,
     championId: null,
     createdAt,
@@ -483,11 +628,49 @@ export function generateBracket(draft: BracketDraft): Bracket {
   };
 
   if (draft.type === "single") {
-    const single = createCompactSingleEliminationRounds(teams, teamCount);
+    if (regionCount === 1) {
+      const single = createCompactSingleEliminationRounds(teams, teamCount, {
+        key: "main-bracket",
+        title: "Championship Bracket",
+      });
+      return applyAutomaticAdvancements({
+        ...base,
+        rounds: single.rounds,
+        matches: single.matches,
+      });
+    }
+
+    const teamsPerRegion = teamCount / regionCount;
+    const regionRounds: Round[] = [];
+    const regionMatches: Record<string, Match> = {};
+    const regionChampionMatches: Match[] = [];
+
+    for (let regionIndex = 0; regionIndex < regionCount; regionIndex += 1) {
+      const regionTeams = regionTeamGroups[regionIndex] ?? teams.slice(regionIndex * teamsPerRegion, (regionIndex + 1) * teamsPerRegion);
+      const group = {
+        key: `region-${regionIndex + 1}`,
+        title: `Region ${regionIndex + 1}`,
+      };
+      const regionBracket = createCompactSingleEliminationRounds(regionTeams, regionTeams.length, group);
+
+      regionRounds.push(...regionBracket.rounds);
+      Object.assign(regionMatches, regionBracket.matches);
+
+      if (regionBracket.finalMatchId) {
+        regionChampionMatches.push(regionBracket.matches[regionBracket.finalMatchId]);
+      }
+    }
+
+    const championship = createChampionshipRoundsFromSources(
+      regionChampionMatches,
+      { key: "region-finals", title: "Regional Finals" },
+      regionMatches,
+    );
+
     return applyAutomaticAdvancements({
       ...base,
-      rounds: single.rounds,
-      matches: single.matches,
+      rounds: [...regionRounds, ...championship.rounds],
+      matches: regionMatches,
     });
   }
 

@@ -78,6 +78,8 @@ export function createParticipant(partial?: Partial<MatchParticipant>): MatchPar
 
 export function createRound(
   bracket: BracketSection,
+  groupKey: string,
+  groupTitle: string,
   round: number,
   title: string,
   matchIds: string[],
@@ -85,6 +87,8 @@ export function createRound(
   return {
     id: createId("round"),
     bracket,
+    groupKey,
+    groupTitle,
     round,
     title,
     matchIds,
@@ -127,6 +131,7 @@ export function createDraft(teamCount = 8): BracketDraft {
     name: "Bracket Factory Invitational",
     type: "single",
     teamCount: normalizedCount,
+    regionCount: 1,
     teams: createEmptyTeams(normalizedCount),
   };
 }

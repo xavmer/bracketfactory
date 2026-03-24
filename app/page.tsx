@@ -31,6 +31,7 @@ export default function HomePage() {
     if (saved) {
       setDraft({
         ...saved.draft,
+        regionCount: saved.draft.regionCount ?? 1,
         teams: normalizeTeams(saved.draft.teams, saved.draft.teamCount),
       });
       setBracket(saved.bracket);
@@ -54,6 +55,17 @@ export default function HomePage() {
     () => bracket?.teams.find((team) => team.id === bracket.championId) ?? null,
     [bracket],
   );
+  const regionOptions = useMemo(() => {
+    const options: number[] = [];
+
+    for (let count = 1; count <= draft.teamCount; count *= 2) {
+      if (draft.teamCount % count === 0) {
+        options.push(count);
+      }
+    }
+
+    return options;
+  }, [draft.teamCount]);
 
   const exportDisabled = !bracket;
 
@@ -77,6 +89,12 @@ export default function HomePage() {
     const nextDraft = {
       ...draft,
       teamCount,
+      regionCount:
+        draft.type === "double"
+          ? 1
+          : regionOptions.includes(draft.regionCount) && teamCount % draft.regionCount === 0
+            ? draft.regionCount
+            : 1,
       teams,
     };
 
@@ -188,6 +206,7 @@ export default function HomePage() {
                         setDraft((current) => ({
                           ...current,
                           type: event.target.value as "single" | "double",
+                          regionCount: event.target.value === "double" ? 1 : current.regionCount,
                         }))
                       }
                       className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white"
@@ -211,6 +230,12 @@ export default function HomePage() {
                         setDraft((current) => ({
                           ...current,
                           teamCount,
+                          regionCount:
+                            current.type === "double" ||
+                            teamCount % current.regionCount !== 0 ||
+                            (current.regionCount & (current.regionCount - 1)) !== 0
+                              ? 1
+                              : current.regionCount,
                           teams: normalizeTeams(current.teams, teamCount).map((team, index) => ({
                             ...team,
                             seed: team.seed ?? index + 1,
@@ -222,6 +247,29 @@ export default function HomePage() {
                     />
                   </label>
                 </div>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    Team Regions
+                  </span>
+                  <select
+                    value={draft.type === "double" ? 1 : draft.regionCount}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        regionCount: Number(event.target.value),
+                      }))
+                    }
+                    disabled={draft.type === "double"}
+                    className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {regionOptions.map((count) => (
+                      <option key={count} value={count}>
+                        {count} {count === 1 ? "region" : "regions"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">

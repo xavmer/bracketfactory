@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import { Bracket, BracketSection, Team } from "@/lib/bracket/models";
+import { Bracket, Team } from "@/lib/bracket/models";
 import { MatchCard } from "@/components/match-card";
 
 interface BracketBoardProps {
@@ -10,14 +10,14 @@ interface BracketBoardProps {
   onClearWinner: (matchId: string) => void;
 }
 
-const sectionTitles: Record<BracketSection, string> = {
-  winners: "Winners Bracket",
-  losers: "Losers Bracket",
-  grandFinal: "Finals",
-};
-
 interface ConnectorPath {
   path: string;
+}
+
+interface RoundGroup {
+  key: string;
+  title: string;
+  rounds: Bracket["rounds"];
 }
 
 const MATCH_CARD_HEIGHT = 170;
@@ -97,53 +97,46 @@ function getChampion(bracket: Bracket, teams: Team[]) {
 
 export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
   ({ bracket, onPickWinner, onClearWinner }, ref) => {
-    const groupedRounds = useMemo(
+    const groupedRounds = useMemo<RoundGroup[]>(
       () =>
-        bracket.rounds.reduce<Record<BracketSection, typeof bracket.rounds>>(
-          (accumulator, round) => {
-            accumulator[round.bracket].push(round);
+        bracket.rounds.reduce<RoundGroup[]>((accumulator, round) => {
+          const existing = accumulator.find((group) => group.key === round.groupKey);
+
+          if (existing) {
+            existing.rounds.push(round);
             return accumulator;
-          },
-          {
-            winners: [],
-            losers: [],
-            grandFinal: [],
-          },
-        ),
+          }
+
+          accumulator.push({
+            key: round.groupKey,
+            title: round.groupTitle,
+            rounds: [round],
+          });
+          return accumulator;
+        }, []),
       [bracket.rounds],
     );
 
     const champion = getChampion(bracket, bracket.teams);
     const matchRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const sectionRefs = useRef<Record<BracketSection, HTMLDivElement | null>>({
-      winners: null,
-      losers: null,
-      grandFinal: null,
-    });
-    const [connectors, setConnectors] = useState<Record<BracketSection, ConnectorPath[]>>({
-      winners: [],
-      losers: [],
-      grandFinal: [],
-    });
+    const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const [connectors, setConnectors] = useState<Record<string, ConnectorPath[]>>({});
 
     useEffect(() => {
       const buildPaths = () => {
-        const nextPaths: Record<BracketSection, ConnectorPath[]> = {
-          winners: [],
-          losers: [],
-          grandFinal: [],
-        };
+        const nextPaths: Record<string, ConnectorPath[]> = {};
 
-        (Object.keys(groupedRounds) as BracketSection[]).forEach((section) => {
-          const sectionElement = sectionRefs.current[section];
+        groupedRounds.forEach((group) => {
+          const sectionElement = sectionRefs.current[group.key];
 
           if (!sectionElement) {
             return;
           }
 
           const sectionRect = sectionElement.getBoundingClientRect();
+          nextPaths[group.key] = [];
 
-          groupedRounds[section].forEach((round) => {
+          group.rounds.forEach((round) => {
             round.matchIds.forEach((matchId) => {
               const match = bracket.matches[matchId];
               const targetId = match.nextWinner?.matchId;
@@ -154,7 +147,7 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
 
               const targetMatch = bracket.matches[targetId];
 
-              if (targetMatch.bracket !== section) {
+              if (targetMatch.groupKey !== group.key) {
                 return;
               }
 
@@ -173,7 +166,7 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
               const y2 = targetRect.top - sectionRect.top + targetRect.height / 2;
               const midX = x1 + Math.max(24, (x2 - x1) / 2);
 
-              nextPaths[section].push({
+              nextPaths[group.key].push({
                 path: `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`,
               });
             });
@@ -231,38 +224,38 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
         </div>
 
         <div className="space-y-8">
-          {(["winners", "losers", "grandFinal"] as BracketSection[]).map((section) => {
-            if (groupedRounds[section].length === 0) {
+          {groupedRounds.map((group) => {
+            if (group.rounds.length === 0) {
               return null;
             }
 
             const { positionsByRoundId, sectionHeight } = getSectionRoundPositions(
-              groupedRounds[section],
+              group.rounds,
               bracket.matches,
             );
 
             return (
-              <section key={section} className="space-y-4">
+              <section key={group.key} className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-display text-xl font-semibold text-ink">
-                    {sectionTitles[section]}
+                    {group.title}
                   </h3>
                   <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                    {groupedRounds[section].length} rounds
+                    {group.rounds.length} rounds
                   </p>
                 </div>
                 <div className="bracket-scrollbar overflow-x-auto rounded-[1.5rem] border border-line/70 bg-mist/60 p-4 pb-3">
                   <div
                     ref={(node) => {
-                      sectionRefs.current[section] = node;
+                      sectionRefs.current[group.key] = node;
                     }}
                     className="relative flex min-w-max items-start"
                     style={{ columnGap: `${ROUND_COLUMN_GAP}px` }}
                   >
                     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-                      {connectors[section].map((connector, index) => (
+                      {(connectors[group.key] ?? []).map((connector, index) => (
                         <path
-                          key={`${section}-connector-${index}`}
+                          key={`${group.key}-connector-${index}`}
                           d={connector.path}
                           fill="none"
                           stroke="rgba(15, 118, 110, 0.4)"
@@ -272,7 +265,7 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                         />
                       ))}
                     </svg>
-                    {groupedRounds[section].map((round, roundIndex) => {
+                    {group.rounds.map((round) => {
                       return (
                         <div key={round.id} className="min-w-[292px] space-y-3">
                           <div>

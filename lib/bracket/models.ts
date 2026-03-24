@@ -24,6 +24,8 @@ export interface MatchConnection {
 export interface Match {
   id: string;
   bracket: BracketSection;
+  groupKey: string;
+  groupTitle: string;
   round: number;
   index: number;
   title: string;
@@ -37,6 +39,8 @@ export interface Match {
 export interface Round {
   id: string;
   bracket: BracketSection;
+  groupKey: string;
+  groupTitle: string;
   round: number;
   title: string;
   matchIds: string[];
@@ -47,6 +51,7 @@ export interface Bracket {
   name: string;
   type: TournamentType;
   teamCount: number;
+  regionCount: number;
   teams: Team[];
   rounds: Round[];
   matches: Record<string, Match>;
@@ -59,6 +64,7 @@ export interface BracketDraft {
   name: string;
   type: TournamentType;
   teamCount: number;
+  regionCount: number;
   teams: Team[];
 }
 
