@@ -1,0 +1,19 @@
+0 verbose cli /Users/xavierleffler/.nvm/versions/node/v24.4.0/bin/node /Users/xavierleffler/.nvm/versions/node/v24.4.0/bin/npm
+1 info using npm@11.10.1
+2 info using node@v24.4.0
+3 silly config load:file:/Users/xavierleffler/.nvm/versions/node/v24.4.0/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/xavierleffler/Projects/bracketfactory/.npmrc
+5 silly config load:file:/Users/xavierleffler/.npmrc
+6 silly config load:file:/Users/xavierleffler/.nvm/versions/node/v24.4.0/etc/npmrc
+7 verbose title npm run dev
+8 verbose argv "run" "dev"
+9 verbose logfile logs-max:10 dir:/Users/xavierleffler/Projects/bracketfactory/.npm-cache/_logs/2026-03-25T13_55_00_061Z-
+10 verbose logfile /Users/xavierleffler/Projects/bracketfactory/.npm-cache/_logs/2026-03-25T13_55_00_061Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly logfile done cleaning log files
+13 verbose cwd /Users/xavierleffler/Projects/bracketfactory
+14 verbose os Darwin 24.6.0
+15 verbose node v24.4.0
+16 verbose npm  v11.10.1
+17 verbose exit 0
+18 info ok

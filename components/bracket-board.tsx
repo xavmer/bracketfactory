@@ -49,22 +49,27 @@ function getSectionRoundPositions(
   matches: Bracket["matches"],
 ) {
   const positionsByRoundId: Record<string, number[]> = {};
-  const hasCompactPlayIn =
+  const hasCompactOpeningRound =
     rounds.length > 1 &&
-    rounds[0].title === "Play-In Round" &&
-    rounds[0].matchIds.length < rounds[1].matchIds.length;
-  const standardRounds = hasCompactPlayIn ? rounds.slice(1) : rounds;
+    rounds[1].matchIds.some((matchId) =>
+      matches[matchId].participants.some((participant) => participant.sourceMatchId),
+    );
+  const standardRounds = hasCompactOpeningRound ? rounds.slice(1) : rounds;
+  const roundIndexOffset = hasCompactOpeningRound ? 1 : 0;
 
   standardRounds.forEach((round, roundIndex) => {
-    const layout = getRoundLayout(roundIndex);
+    const layout = getRoundLayout(roundIndex + roundIndexOffset);
     positionsByRoundId[round.id] = round.matchIds.map(
       (_, matchIndex) => layout.paddingTop + matchIndex * (MATCH_CARD_HEIGHT + layout.gap),
     );
   });
 
-  if (hasCompactPlayIn) {
+  if (hasCompactOpeningRound) {
     const targetRound = rounds[1];
-    positionsByRoundId[rounds[0].id] = rounds[0].matchIds.map((matchId) => {
+    const openingRoundLayout = getRoundLayout(0);
+    const nextRoundLayout = getRoundLayout(1);
+
+    const desiredPositions = rounds[0].matchIds.map((matchId) => {
       const targetIndex = targetRound.matchIds.findIndex((targetMatchId) =>
         matches[targetMatchId].participants.some((participant) => participant.sourceMatchId === matchId),
       );
@@ -76,9 +81,14 @@ function getSectionRoundPositions(
       const targetMatch = matches[targetRound.matchIds[targetIndex]];
       const slot =
         targetMatch.participants[0].sourceMatchId === matchId ? 1 : 2;
-
-      return positionsByRoundId[targetRound.id][targetIndex] + MATCH_SLOT_CENTER_Y[slot] - MATCH_CARD_HEIGHT / 2;
+      return (
+        positionsByRoundId[targetRound.id][targetIndex] -
+        nextRoundLayout.paddingTop +
+        (slot === 1 ? 0 : openingRoundLayout.gap + MATCH_CARD_HEIGHT)
+      );
     });
+
+    positionsByRoundId[rounds[0].id] = desiredPositions;
   }
 
   const sectionHeight = Math.max(
@@ -163,7 +173,10 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
               const x1 = sourceRect.right - sectionRect.left;
               const y1 = sourceRect.top - sectionRect.top + sourceRect.height / 2;
               const x2 = targetRect.left - sectionRect.left;
-              const y2 = targetRect.top - sectionRect.top + targetRect.height / 2;
+              const y2 =
+                targetRect.top -
+                sectionRect.top +
+                MATCH_SLOT_CENTER_Y[match.nextWinner?.slot ?? 1];
               const midX = x1 + Math.max(24, (x2 - x1) / 2);
 
               nextPaths[group.key].push({

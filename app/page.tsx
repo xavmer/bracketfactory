@@ -23,6 +23,7 @@ export default function HomePage() {
   const [bracket, setBracket] = useState<Bracket | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [teamImportText, setTeamImportText] = useState("");
+  const [teamCountInput, setTeamCountInput] = useState(() => String(createDraft().teamCount));
   const boardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function HomePage() {
         regionCount: saved.draft.regionCount ?? 1,
         teams: normalizeTeams(saved.draft.teams, saved.draft.teamCount),
       });
+      setTeamCountInput(String(saved.draft.teamCount));
       setBracket(saved.bracket);
     }
 
@@ -68,6 +70,37 @@ export default function HomePage() {
   }, [draft.teamCount]);
 
   const exportDisabled = !bracket;
+  const parsedTeamCount = Number(teamCountInput);
+  const isTeamCountValid =
+    Number.isInteger(parsedTeamCount) &&
+    parsedTeamCount >= MIN_TEAM_COUNT &&
+    parsedTeamCount <= MAX_TEAM_COUNT;
+  const teamCountError =
+    teamCountInput.trim() === ""
+      ? "Enter a team count."
+      : !Number.isInteger(parsedTeamCount)
+        ? "Team count must be a whole number."
+        : parsedTeamCount < MIN_TEAM_COUNT || parsedTeamCount > MAX_TEAM_COUNT
+          ? `Team count must be between ${MIN_TEAM_COUNT} and ${MAX_TEAM_COUNT}.`
+          : null;
+
+  const applyTeamCount = (teamCount: number) => {
+    setDraft((current) => ({
+      ...current,
+      teamCount,
+      regionCount:
+        current.type === "double" ||
+        teamCount % current.regionCount !== 0 ||
+        (current.regionCount & (current.regionCount - 1)) !== 0
+          ? 1
+          : current.regionCount,
+      teams: normalizeTeams(current.teams, teamCount).map((team, index) => ({
+        ...team,
+        seed: team.seed ?? index + 1,
+      })),
+    }));
+    setBracket(null);
+  };
 
   const importTeams = () => {
     const importedNames = teamImportText
@@ -99,6 +132,7 @@ export default function HomePage() {
     };
 
     setDraft(nextDraft);
+    setTeamCountInput(String(teamCount));
     setBracket(generateBracket(nextDraft));
   };
 
@@ -224,27 +258,25 @@ export default function HomePage() {
                       type="number"
                       min={MIN_TEAM_COUNT}
                       max={MAX_TEAM_COUNT}
-                      value={draft.teamCount}
+                      value={teamCountInput}
                       onChange={(event) => {
-                        const teamCount = clampTeamCount(Number(event.target.value));
-                        setDraft((current) => ({
-                          ...current,
-                          teamCount,
-                          regionCount:
-                            current.type === "double" ||
-                            teamCount % current.regionCount !== 0 ||
-                            (current.regionCount & (current.regionCount - 1)) !== 0
-                              ? 1
-                              : current.regionCount,
-                          teams: normalizeTeams(current.teams, teamCount).map((team, index) => ({
-                            ...team,
-                            seed: team.seed ?? index + 1,
-                          })),
-                        }));
-                        setBracket(null);
+                        setTeamCountInput(event.target.value);
                       }}
-                      className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white"
+                      onBlur={() => {
+                        if (isTeamCountValid) {
+                          applyTeamCount(parsedTeamCount);
+                        }
+                      }}
+                      className={[
+                        "w-full rounded-2xl border bg-mist px-4 py-3 text-sm outline-none transition focus:bg-white",
+                        teamCountError
+                          ? "border-rose-300 text-rose-900 focus:border-rose-400"
+                          : "border-line focus:border-accent",
+                      ].join(" ")}
                     />
+                    {teamCountError ? (
+                      <p className="text-xs text-rose-600">{teamCountError}</p>
+                    ) : null}
                   </label>
                 </div>
 
@@ -274,14 +306,21 @@ export default function HomePage() {
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                 <button
-                  onClick={() =>
+                  onClick={() => {
+                    if (!isTeamCountValid) {
+                      return;
+                    }
+
+                    applyTeamCount(parsedTeamCount);
                     setBracket(
                       generateBracket({
                         ...draft,
-                        teams: normalizeTeams(draft.teams, draft.teamCount),
+                        teamCount: parsedTeamCount,
+                        teams: normalizeTeams(draft.teams, parsedTeamCount),
                       }),
-                    )
-                  }
+                    );
+                  }}
+                  disabled={!isTeamCountValid}
                   className="inline-flex items-center justify-center rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   Generate Bracket
@@ -293,6 +332,7 @@ export default function HomePage() {
                       ...nextDraft,
                       type: draft.type,
                     });
+                    setTeamCountInput(String(nextDraft.teamCount));
                     setBracket(null);
                   }}
                   className="inline-flex items-center justify-center rounded-2xl border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:border-accent hover:text-accent"
