@@ -28,58 +28,85 @@ const MATCH_SLOT_CENTER_Y: Record<1 | 2, number> = {
   2: 120,
 };
 
-function getRoundLayout(roundIndex: number) {
-  const unit = MATCH_CARD_HEIGHT + ROUND_MATCH_GAP;
-
-  if (roundIndex === 0) {
-    return {
-      paddingTop: 0,
-      gap: ROUND_MATCH_GAP,
-    };
-  }
-
-  return {
-    paddingTop: (unit * (2 ** roundIndex - 1)) / 2,
-    gap: unit * 2 ** roundIndex - MATCH_CARD_HEIGHT,
-  };
-}
-
 function getSectionRoundPositions(
   rounds: Bracket["rounds"],
   matches: Bracket["matches"],
 ) {
   const positionsByRoundId: Record<string, number[]> = {};
-  const hasCompactPlayIn =
-    rounds.length > 1 &&
-    rounds[0].title === "Play-In Round" &&
-    rounds[0].matchIds.length < rounds[1].matchIds.length;
-  const standardRounds = hasCompactPlayIn ? rounds.slice(1) : rounds;
+  const positionsByMatchId: Record<string, number> = {};
+  const minimumSpacing = MATCH_CARD_HEIGHT + ROUND_MATCH_GAP;
+  const lastRound = rounds[rounds.length - 1];
 
-  standardRounds.forEach((round, roundIndex) => {
-    const layout = getRoundLayout(roundIndex);
-    positionsByRoundId[round.id] = round.matchIds.map(
-      (_, matchIndex) => layout.paddingTop + matchIndex * (MATCH_CARD_HEIGHT + layout.gap),
-    );
+  if (!lastRound) {
+    return { positionsByRoundId, sectionHeight: MATCH_CARD_HEIGHT };
+  }
+
+  lastRound.matchIds.forEach((matchId, index) => {
+    positionsByMatchId[matchId] = index * (MATCH_CARD_HEIGHT + ROUND_MATCH_GAP);
   });
 
-  if (hasCompactPlayIn) {
-    const targetRound = rounds[1];
-    positionsByRoundId[rounds[0].id] = rounds[0].matchIds.map((matchId) => {
-      const targetIndex = targetRound.matchIds.findIndex((targetMatchId) =>
-        matches[targetMatchId].participants.some((participant) => participant.sourceMatchId === matchId),
-      );
+  for (let roundIndex = rounds.length - 2; roundIndex >= 0; roundIndex -= 1) {
+    const round = rounds[roundIndex];
+    const desiredPositions = round.matchIds.map((matchId) => {
+      const match = matches[matchId];
+      const target = match.nextWinner ? matches[match.nextWinner.matchId] : null;
 
-      if (targetIndex === -1) {
+      if (!target || target.groupKey !== round.groupKey) {
         return 0;
       }
 
-      const targetMatch = matches[targetRound.matchIds[targetIndex]];
-      const slot =
-        targetMatch.participants[0].sourceMatchId === matchId ? 1 : 2;
+      const targetTop = positionsByMatchId[target.id] ?? 0;
+      return targetTop + MATCH_SLOT_CENTER_Y[match.nextWinner?.slot ?? 1] - MATCH_CARD_HEIGHT / 2;
+    });
 
-      return positionsByRoundId[targetRound.id][targetIndex] + MATCH_SLOT_CENTER_Y[slot] - MATCH_CARD_HEIGHT / 2;
+    const sortedByDesiredTop = round.matchIds
+      .map((matchId, index) => ({
+        matchId,
+        desiredTop: desiredPositions[index],
+      }))
+      .sort((left, right) => left.desiredTop - right.desiredTop);
+
+    const transformed = sortedByDesiredTop.map((item, index) => item.desiredTop - index * minimumSpacing);
+    const blocks: Array<{ start: number; end: number; value: number }> = [];
+
+    transformed.forEach((value, index) => {
+      blocks.push({ start: index, end: index, value });
+
+      while (
+        blocks.length > 1 &&
+        blocks[blocks.length - 2].value > blocks[blocks.length - 1].value
+      ) {
+        const right = blocks.pop()!;
+        const left = blocks.pop()!;
+        const leftCount = left.end - left.start + 1;
+        const rightCount = right.end - right.start + 1;
+        blocks.push({
+          start: left.start,
+          end: right.end,
+          value: (left.value * leftCount + right.value * rightCount) / (leftCount + rightCount),
+        });
+      }
+    });
+
+    const adjustedBase: number[] = Array.from({ length: sortedByDesiredTop.length }, () => 0);
+    blocks.forEach((block) => {
+      for (let index = block.start; index <= block.end; index += 1) {
+        adjustedBase[index] = block.value;
+      }
+    });
+
+    sortedByDesiredTop.forEach((item, index) => {
+      positionsByMatchId[item.matchId] = adjustedBase[index] + index * minimumSpacing;
     });
   }
+
+  const minimumTop = Math.min(...Object.values(positionsByMatchId), 0);
+
+  rounds.forEach((round) => {
+    positionsByRoundId[round.id] = round.matchIds.map(
+      (matchId) => (positionsByMatchId[matchId] ?? 0) - minimumTop,
+    );
+  });
 
   const sectionHeight = Math.max(
     ...rounds.flatMap((round) =>
@@ -163,7 +190,10 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
               const x1 = sourceRect.right - sectionRect.left;
               const y1 = sourceRect.top - sectionRect.top + sourceRect.height / 2;
               const x2 = targetRect.left - sectionRect.left;
-              const y2 = targetRect.top - sectionRect.top + targetRect.height / 2;
+              const y2 =
+                targetRect.top -
+                sectionRect.top +
+                MATCH_SLOT_CENTER_Y[match.nextWinner?.slot ?? 1];
               const midX = x1 + Math.max(24, (x2 - x1) / 2);
 
               nextPaths[group.key].push({

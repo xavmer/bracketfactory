@@ -52,6 +52,7 @@ export interface Bracket {
   type: TournamentType;
   teamCount: number;
   regionCount: number;
+  roundCount: number;
   teams: Team[];
   rounds: Round[];
   matches: Record<string, Match>;
@@ -65,6 +66,7 @@ export interface BracketDraft {
   type: TournamentType;
   teamCount: number;
   regionCount: number;
+  roundCount: number;
   teams: Team[];
 }
 

@@ -13,8 +13,11 @@ import {
   MAX_TEAM_COUNT,
   MIN_TEAM_COUNT,
   clampTeamCount,
+  clampRoundCount,
   createId,
   createDraft,
+  getMaximumRoundCount,
+  getMinimumRoundCount,
   normalizeTeams,
 } from "@/lib/bracket/utils";
 
@@ -32,6 +35,7 @@ export default function HomePage() {
       setDraft({
         ...saved.draft,
         regionCount: saved.draft.regionCount ?? 1,
+        roundCount: clampRoundCount(saved.draft.teamCount, saved.draft.roundCount ?? saved.draft.teamCount),
         teams: normalizeTeams(saved.draft.teams, saved.draft.teamCount),
       });
       setBracket(saved.bracket);
@@ -55,6 +59,8 @@ export default function HomePage() {
     () => bracket?.teams.find((team) => team.id === bracket.championId) ?? null,
     [bracket],
   );
+  const minimumRoundCount = useMemo(() => getMinimumRoundCount(draft.teamCount), [draft.teamCount]);
+  const maximumRoundCount = useMemo(() => getMaximumRoundCount(draft.teamCount), [draft.teamCount]);
   const regionOptions = useMemo(() => {
     const options: number[] = [];
 
@@ -95,6 +101,7 @@ export default function HomePage() {
           : regionOptions.includes(draft.regionCount) && teamCount % draft.regionCount === 0
             ? draft.regionCount
             : 1,
+      roundCount: clampRoundCount(teamCount, draft.roundCount),
       teams,
     };
 
@@ -207,6 +214,12 @@ export default function HomePage() {
                           ...current,
                           type: event.target.value as "single" | "double",
                           regionCount: event.target.value === "double" ? 1 : current.regionCount,
+                          roundCount: clampRoundCount(
+                            current.teamCount,
+                            event.target.value === "double"
+                              ? getMinimumRoundCount(current.teamCount)
+                              : current.roundCount,
+                          ),
                         }))
                       }
                       className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white"
@@ -236,6 +249,7 @@ export default function HomePage() {
                             (current.regionCount & (current.regionCount - 1)) !== 0
                               ? 1
                               : current.regionCount,
+                          roundCount: clampRoundCount(teamCount, current.roundCount),
                           teams: normalizeTeams(current.teams, teamCount).map((team, index) => ({
                             ...team,
                             seed: team.seed ?? index + 1,
@@ -247,6 +261,29 @@ export default function HomePage() {
                     />
                   </label>
                 </div>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    Bracket Rounds
+                  </span>
+                  <input
+                    type="number"
+                    min={minimumRoundCount}
+                    max={maximumRoundCount}
+                    value={draft.type === "double" ? minimumRoundCount : draft.roundCount}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        roundCount: clampRoundCount(current.teamCount, Number(event.target.value)),
+                      }))
+                    }
+                    disabled={draft.type === "double"}
+                    className="w-full rounded-2xl border border-line bg-mist px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <p className="text-xs leading-5 text-slate-500">
+                    Higher values create more staged entry rounds and more bye tiers.
+                  </p>
+                </label>
 
                 <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">

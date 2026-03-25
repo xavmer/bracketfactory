@@ -23,6 +23,21 @@ export function getBracketSize(teamCount: number) {
   return 2 ** Math.ceil(Math.log2(normalizedCount));
 }
 
+export function getMinimumRoundCount(teamCount: number) {
+  return Math.ceil(Math.log2(clampTeamCount(teamCount)));
+}
+
+export function getMaximumRoundCount(teamCount: number) {
+  return Math.max(getMinimumRoundCount(teamCount), clampTeamCount(teamCount) - 1);
+}
+
+export function clampRoundCount(teamCount: number, roundCount: number) {
+  return Math.min(
+    getMaximumRoundCount(teamCount),
+    Math.max(getMinimumRoundCount(teamCount), Math.floor(roundCount || getMinimumRoundCount(teamCount))),
+  );
+}
+
 export function createEmptyTeams(count: number): Team[] {
   return Array.from({ length: count }, (_, index) => ({
     id: createId("team"),
@@ -132,6 +147,7 @@ export function createDraft(teamCount = 8): BracketDraft {
     type: "single",
     teamCount: normalizedCount,
     regionCount: 1,
+    roundCount: getMinimumRoundCount(normalizedCount),
     teams: createEmptyTeams(normalizedCount),
   };
 }
