@@ -26,7 +26,7 @@ export function getBracketSize(teamCount: number) {
 export function createEmptyTeams(count: number): Team[] {
   return Array.from({ length: count }, (_, index) => ({
     id: createId("team"),
-    name: `Team ${index + 1}`,
+    name: "",
     seed: index + 1,
   }));
 }
@@ -35,7 +35,7 @@ export function normalizeTeams(teams: Team[], teamCount: number): Team[] {
   const normalizedCount = clampTeamCount(teamCount);
   const nextTeams: Team[] = teams.slice(0, normalizedCount).map((team, index) => ({
     ...team,
-    name: team.name || `Team ${index + 1}`,
+    name: team.name ?? "",
     seed: team.seed ?? index + 1,
   }));
 

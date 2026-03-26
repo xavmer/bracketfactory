@@ -12,6 +12,7 @@ interface BracketBoardProps {
 
 interface ConnectorPath {
   path: string;
+  stroke: string;
 }
 
 interface RoundGroup {
@@ -105,6 +106,10 @@ function getChampion(bracket: Bracket, teams: Team[]) {
   return teams.find((team) => team.id === bracket.championId) ?? null;
 }
 
+function getTeamColor(teams: Team[], teamId: string | null) {
+  return teams.find((team) => team.id === teamId)?.color ?? null;
+}
+
 export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
   ({ bracket, onPickWinner, onClearWinner }, ref) => {
     const groupedRounds = useMemo<RoundGroup[]>(
@@ -178,9 +183,11 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                 sectionRect.top +
                 MATCH_SLOT_CENTER_Y[match.nextWinner?.slot ?? 1];
               const midX = x1 + Math.max(24, (x2 - x1) / 2);
+              const winnerColor = getTeamColor(bracket.teams, match.winnerId);
 
               nextPaths[group.key].push({
                 path: `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`,
+                stroke: winnerColor ? `${winnerColor}cc` : "rgba(15, 118, 110, 0.4)",
               });
             });
           });
@@ -271,7 +278,7 @@ export const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                           key={`${group.key}-connector-${index}`}
                           d={connector.path}
                           fill="none"
-                          stroke="rgba(15, 118, 110, 0.4)"
+                          stroke={connector.stroke}
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth="2.5"

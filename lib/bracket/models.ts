@@ -7,6 +7,7 @@ export interface Team {
   id: string;
   name: string;
   seed?: number;
+  color?: string;
 }
 
 export interface MatchParticipant {

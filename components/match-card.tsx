@@ -24,6 +24,15 @@ function getParticipantLabel(match: Match, index: 0 | 1, teams: Team[]) {
   return participant.label ?? "TBD";
 }
 
+function createWinnerStyle(color: string) {
+  return {
+    borderColor: color,
+    color: "#ffffff",
+    backgroundImage: `linear-gradient(135deg, ${color}, ${color}dd 55%, ${color}b3)`,
+    boxShadow: `0 14px 28px -18px ${color}`,
+  };
+}
+
 export function MatchCard({
   match,
   teams,
@@ -53,6 +62,7 @@ export function MatchCard({
         {[0, 1].map((index) => {
           const teamId = match.participants[index].teamId;
           const isWinner = match.winnerId === teamId && teamId !== null;
+          const team = getTeam(teams, teamId);
 
           return (
             <button
@@ -63,10 +73,13 @@ export function MatchCard({
                 }
               }}
               disabled={!canPick || !teamId}
+              style={isWinner && team?.color ? createWinnerStyle(team.color) : undefined}
               className={[
                 "flex h-[56px] w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
                 isWinner
-                  ? "border-accent bg-accent text-white"
+                  ? team?.color
+                    ? ""
+                    : "border-accent bg-accent text-white"
                   : "border-line bg-mist/90 text-ink hover:border-accentWarm hover:bg-white",
                 !canPick || !teamId ? "cursor-not-allowed opacity-60" : "",
               ].join(" ")}

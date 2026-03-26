@@ -24,6 +24,7 @@ export default function HomePage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [teamImportText, setTeamImportText] = useState("");
   const [teamCountInput, setTeamCountInput] = useState(() => String(createDraft().teamCount));
+  const [showParticipantColors, setShowParticipantColors] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -364,12 +365,32 @@ export default function HomePage() {
               </div>
 
               <div className="mt-6 rounded-[1.75rem] border border-line bg-mist/80 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Trophy className="h-4 w-4 text-accentWarm" />
-                  <p className="text-sm font-semibold text-ink">Team and seed inputs</p>
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-accentWarm" />
+                    <p className="text-sm font-semibold text-ink">Team and seed inputs</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowParticipantColors((current) => !current)}
+                    className={[
+                      "inline-flex items-center justify-center rounded-2xl border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition",
+                      showParticipantColors
+                        ? "border-accent bg-accent text-white shadow-sm"
+                        : "border-line bg-white text-slate-600 hover:border-accent hover:text-accent",
+                    ].join(" ")}
+                  >
+                    {showParticipantColors ? "Hide Participant Colors" : "Assign Participant Colors"}
+                  </button>
                 </div>
+                {showParticipantColors ? (
+                  <div className="mb-4 rounded-2xl border border-line/80 bg-white/80 px-4 py-3 text-sm text-slate-600">
+                    Pick optional team colors for winner highlights and connector lines.
+                  </div>
+                ) : null}
                 <TeamEditor
                   teams={normalizeTeams(draft.teams, draft.teamCount)}
+                  showColors={showParticipantColors}
                   onChange={(teams) => {
                     setDraft((current) => ({
                       ...current,
